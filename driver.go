@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -18,24 +19,37 @@ import (
 type Driver struct {
 }
 
-// Open takes a connection string in the format `dataapi:<cluster ARN>|<secret ARN>|<database>`
+// Open takes a connection string in the format `dataapi:///<database>?clusterARN=<cluster ARN>&secretARN=<secret ARN>`
 func (d Driver) Open(connString string) (driver.Conn, error) {
 	if !strings.HasPrefix(connString, "dataapi:") {
-		return nil, fmt.Errorf("Expected connection string with the format 'dataapi:<cluster ARN>|<secret ARN>|<database>', got '%s'", connString)
+		return nil, fmt.Errorf("Expected connection string with the format 'dataapi:///<database>?clusterARN=<cluster ARN>&secretARN=<secret ARN>', got '%s'", connString)
 	}
-	parts := strings.Split(strings.TrimPrefix(connString, "dataapi:"), "|")
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("Expected connection string with the format 'dataapi:<cluster ARN>|<secret ARN>|<database>', got '%s'", connString)
+	u, err := url.Parse(connString)
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing connection URL '%s': %v", connString, err)
 	}
+	clusterARN := u.Query().Get("clusterARN")
+	if clusterARN == "" {
+		return nil, fmt.Errorf("Missing clusterARN in connection URL '%s'", connString)
+	}
+	secretARN := u.Query().Get("secretARN")
+	if secretARN == "" {
+		return nil, fmt.Errorf("Missing secretARN in connection URL '%s'", connString)
+	}
+	database := strings.TrimPrefix(u.Path, "/")
+	if database == "" {
+		return nil, fmt.Errorf("Missing database in connection URL '%s'", connString)
+	}
+
 	sess, err := session.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("Error creating session: %w", err)
 	}
 	conn := &dataAPIConn{
 		service:    rdsdataservice.New(sess),
-		clusterARN: parts[0],
-		secretARN:  parts[1],
-		database:   parts[2],
+		clusterARN: clusterARN,
+		secretARN:  secretARN,
+		database:   database,
 	}
 
 	return conn, nil

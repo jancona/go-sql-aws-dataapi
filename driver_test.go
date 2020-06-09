@@ -38,7 +38,7 @@ func (p *dataapiDB) RunTest(t *testing.T, fn func(params)) {
 	if dbName == "" {
 		dbName = "gosqltest"
 	}
-	db, err := sql.Open("dataapi", fmt.Sprintf("dataapi:%s|%s|%s", clusterARN, secretARN, dbName))
+	db, err := sql.Open("dataapi", fmt.Sprintf("dataapi:///%s?clusterARN=%s&secretARN=%s", dbName, clusterARN, secretARN))
 	if err != nil {
 		t.Fatalf("error connecting: %v", err)
 	}
