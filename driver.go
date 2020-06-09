@@ -13,10 +13,15 @@ import (
 	"github.com/aws/aws-sdk-go/service/rdsdataservice"
 )
 
+const DriverName = "dataapi"
+
 // Driver is exported to make the driver directly accessible where
 // needed. General usage is expected to be constrained to the database/sql
 // APIs.
-type Driver struct {
+type Driver struct{}
+
+func init() {
+	sql.Register(DriverName, &Driver{})
 }
 
 // Open takes a connection string in the format `dataapi:///<database>?clusterARN=<cluster ARN>&secretARN=<secret ARN>`
@@ -53,8 +58,4 @@ func (d Driver) Open(connString string) (driver.Conn, error) {
 	}
 
 	return conn, nil
-}
-
-func init() {
-	sql.Register("dataapi", &Driver{})
 }

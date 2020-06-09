@@ -433,7 +433,7 @@ func testManyQueryRow(t params) {
 	t.mustExec("create table " + TablePrefix + "foo (id integer primary key, name varchar(50))")
 	t.mustExec(t.q("insert into "+TablePrefix+"foo (id, name) values(?,?)"), 1, "bob")
 	var name string
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 100; i++ {
 		err := t.QueryRow(t.q("select name from "+TablePrefix+"foo where id = ?"), 1).Scan(&name)
 		if err != nil || name != "bob" {
 			t.Fatalf("on query %d: err=%v, name=%q", i, err, name)
