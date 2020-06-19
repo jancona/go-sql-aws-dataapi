@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"io"
+	"log"
 	"regexp"
 	"strconv"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rdsdataservice"
 )
+
+const PostgresDateFormat = "2006-01-02 15:04:05.999"
 
 var errNoLastInsertID = errors.New("no LastInsertId available after the empty statement")
 
@@ -92,19 +95,20 @@ func (s *dataAPIStmt) execute(args []driver.Value) (*rdsdataservice.ExecuteState
 		case bool:
 			f.SetBooleanValue(v)
 		case []byte:
-			f.SetBlobValue(v)
+			f.SetStringValue(string(v))
 		case string:
 			f.SetStringValue(v)
 		case time.Time:
 			// DATA API format is YYYY-MM-DD HH:MM:SS[.FFF]
-			f.SetStringValue(v.Format("2006-01-02 15:04:05.999"))
+			f.SetStringValue(v.Format(PostgresDateFormat))
 			// params[n].SetTypeHint("TIMESTAMP")
 		}
 	}
-	// log.Printf("Executing query '%s' with args: %#v", s.query, params)
+	log.Printf("Executing query '%s' with args: %#v", s.query, params)
 	esi := &rdsdataservice.ExecuteStatementInput{
 		ResourceArn:           &s.conn.clusterARN,
 		Database:              &s.conn.database,
+		Schema:                aws.String("public"),
 		SecretArn:             &s.conn.secretARN,
 		Sql:                   &s.query,
 		Parameters:            params,
@@ -155,6 +159,7 @@ func (r *dataAPIRows) Next(dest []driver.Value) error {
 	}
 	row := ""
 	for n, c := range r.eso.Records[r.n] {
+
 		if c.IsNull != nil && *c.IsNull {
 			dest[n] = nil
 		} else if c.BlobValue != nil {
@@ -166,11 +171,26 @@ func (r *dataAPIRows) Next(dest []driver.Value) error {
 		} else if c.LongValue != nil {
 			dest[n] = *c.LongValue
 		} else if c.StringValue != nil {
-			dest[n] = *c.StringValue
+			switch *r.eso.ColumnMetadata[n].TypeName {
+			case "jsonb":
+				dest[n] = []byte(*c.StringValue)
+			case "timestamptz":
+				fallthrough
+			case "timestamp":
+				log.Printf("Parsing timestamp value '%s'", *c.StringValue)
+				var err error
+				dest[n], err = time.Parse(PostgresDateFormat, *c.StringValue)
+				if err != nil {
+					log.Printf("Error parsing timestamp value '%s': %v", *c.StringValue, err)
+					dest[n] = *c.StringValue
+				}
+			default:
+				dest[n] = *c.StringValue
+			}
 		}
-		row += c.String() + " "
+		row += "\n type: " + *r.eso.ColumnMetadata[n].TypeName + ", value: " + c.String()
 	}
-	// log.Printf("Next() row %d: %s", r.n, row)
+	log.Printf("Next() row %d: %s", r.n, row)
 	r.n++
 	return nil
 }

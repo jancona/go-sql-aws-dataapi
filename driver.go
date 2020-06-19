@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 
@@ -21,6 +22,7 @@ const DriverName = "dataapi"
 type Driver struct{}
 
 func init() {
+	log.Printf("Registering driver %s", DriverName)
 	sql.Register(DriverName, &Driver{})
 }
 
